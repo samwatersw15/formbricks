@@ -8,6 +8,7 @@ import { useCallback, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import type { TFeedbackSourceFieldMapping } from "@formbricks/types/feedback-source";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { getFeedbackRecordContactsAction, listFeedbackRecordsAction } from "@/lib/feedback-source/actions";
 import { formatDateForDisplay, formatDateTimeForDisplay } from "@/lib/utils/datetime";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
@@ -237,6 +238,14 @@ export const FeedbackRecordsTable = ({
     setCursors(result.newCursors);
     setSelectedIds(new Set());
     setIsRefreshing(false);
+    try {
+      pushDataLayer("feedback_records_viewed", {
+        result_count: result.records.length,
+        has_more: Object.keys(result.newCursors).length > 0,
+      });
+    } catch {
+      // Analytics must not interfere with the successful records refresh.
+    }
     toast.success(t("workspace.unify.feedback_records_refreshed"), { id: toastId });
     void resolveContactsForRecords(mergedRecords);
   };
@@ -267,6 +276,14 @@ export const FeedbackRecordsTable = ({
     );
     setCursors(result.newCursors);
     setIsLoadingMore(false);
+    try {
+      pushDataLayer("feedback_records_viewed", {
+        result_count: result.records.length,
+        has_more: Object.keys(result.newCursors).length > 0,
+      });
+    } catch {
+      // Analytics must not interfere with the successful records pagination.
+    }
     void resolveContactsForRecords(result.records);
   };
 
@@ -302,11 +319,25 @@ export const FeedbackRecordsTable = ({
           }))
         );
         results.forEach(({ recordId, result }) => {
-          if (!result?.data) failedIds.push(recordId);
+          if (!result?.data) {
+            failedIds.push(recordId);
+            try {
+              pushDataLayer("feedback_record_maintenance_failed", { action: "delete" });
+            } catch {
+              // Analytics must not interfere with the failed deletion response.
+            }
+          }
         });
       }
 
       const succeeded = ids.filter((id) => !failedIds.includes(id));
+      succeeded.forEach(() => {
+        try {
+          pushDataLayer("feedback_record_deleted", { delete_outcome: "deleted" });
+        } catch {
+          // Analytics must not interfere with successful deletions.
+        }
+      });
       if (succeeded.length > 0) {
         setRecords((prev) => prev.filter((record) => !succeeded.includes(record.id)));
         setSelectedIds((prev) => {

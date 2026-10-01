@@ -1,3 +1,4 @@
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { CSV_IMPORT_FAILED_ERROR_CODE } from "./types";
 
 type TCsvImportApiSuccess = {
@@ -61,5 +62,23 @@ export const importCsvFile = async ({
     };
   }
 
-  return { data: body as TCsvImportApiSuccess };
+  const data = body as TCsvImportApiSuccess;
+  if (data.successes > 0) {
+    try {
+      pushDataLayer("feedback_record_batch_completed", {
+        created_count: data.successes,
+        failed_count: data.failures,
+      });
+    } catch {
+      // Analytics must not affect the completed import response.
+    }
+  } else if (data.failures > 0) {
+    try {
+      pushDataLayer("feedback_record_creation_failed");
+    } catch {
+      // Analytics must not affect the completed import response.
+    }
+  }
+
+  return { data };
 };

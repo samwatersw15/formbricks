@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import type { TaxonomyNode, TaxonomyRun } from "@/modules/hub/types";
+import { pushDataLayer } from "../../../../../../../src/lib/data-layer";
 import { AiStatusLine } from "@/modules/ui/components/ai";
 import { Alert, AlertButton, AlertDescription, AlertTitle } from "@/modules/ui/components/alert";
 import { ConfirmationModal } from "@/modules/ui/components/confirmation-modal";
@@ -132,6 +133,18 @@ export const TopicsSubtopicsContainer = ({
     }
     return map;
   }, [recordCountsQuery.data]);
+
+  useEffect(() => {
+    if (!recordCountsQuery.isSuccess || !selectedNode) return;
+    const recordCount = recordCounts.get(selectedNode.id);
+    if (typeof recordCount !== "number") return;
+
+    try {
+      pushDataLayer("feedback_record_count_viewed", { record_count: recordCount });
+    } catch {
+      // Analytics must not interfere with the displayed feedback-record count.
+    }
+  }, [recordCounts, recordCountsQuery.isSuccess, selectedNode]);
 
   const triggerMutation = useTriggerTaxonomyRun({ workspaceId, scope });
   const renameMutation = useRenameTaxonomyNode({ workspaceId, scope });

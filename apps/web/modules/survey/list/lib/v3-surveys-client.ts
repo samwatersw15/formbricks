@@ -1,4 +1,5 @@
 import type { TSurveyStatus } from "@formbricks/types/surveys/types";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import type { TV3SurveyGenerateBody } from "@/app/api/v3/surveys/generate/schemas";
 import type { TV3CreateSurveyBody, TV3SurveyValidationRequestBody } from "@/app/api/v3/surveys/schemas";
 import { parseV3ApiError } from "@/modules/api/lib/v3-client";
@@ -332,9 +333,32 @@ export async function createV3Survey(
   });
 
   if (!response.ok) {
+    try {
+      pushDataLayer("survey_creation_failed", {
+        survey_type: payload.type,
+        failure_category:
+          response.status === 400 || response.status === 422
+            ? "validation"
+            : response.status === 401 || response.status === 403
+              ? "permission"
+              : response.status >= 500
+                ? "server_error"
+                : "http_error",
+        http_status: response.status,
+      });
+    } catch {
+      // Analytics must not affect the survey creation result.
+    }
     throw await parseV3ApiError(response);
   }
 
   const responseBody = (await response.json()) as TV3CreateSurveyResponse;
+  if (response.status === 201) {
+    pushDataLayer("survey_created", {
+      survey_type: payload.type,
+      block_count: payload.blocks.length,
+      language_count: payload.languages.length,
+    });
+  }
   return responseBody.data;
 }

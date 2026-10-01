@@ -19,6 +19,7 @@ import {
   ZSurveyRedirectUrlCard,
 } from "@formbricks/types/surveys/types";
 import { structuredClone } from "@/lib/pollyfills/structuredClone";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
 import { isDeepEqual } from "@/lib/utils/object";
 import { reportStaleServerActionError } from "@/lib/utils/stale-server-action";
@@ -389,6 +390,24 @@ export const SurveyMenuBar = ({
 
         if (updatedSurveyResponse?.data) {
           const savedData = updatedSurveyResponse.data;
+          const previousBlocks = surveyRef.current.blocks;
+          if (!isDeepEqual(previousBlocks, currentSurvey.blocks)) {
+            const previousBlockIds = previousBlocks.map((block) => block.id);
+            const currentBlockIds = currentSurvey.blocks.map((block) => block.id);
+            const isReorder =
+              previousBlockIds.length === currentBlockIds.length &&
+              previousBlockIds.some((id, index) => id !== currentBlockIds[index]) &&
+              previousBlocks.every((block) =>
+                isDeepEqual(block, currentSurvey.blocks.find((currentBlock) => currentBlock.id === block.id))
+              );
+            try {
+              pushDataLayer("survey_structure_updated", {
+                edit_operation: isReorder ? "reorder" : "edit",
+              });
+            } catch {
+              // Analytics must not interfere with the successful survey save.
+            }
+          }
 
           // If the segment changed on the server (e.g., private segment was deleted when
           // switching from app to link type), update localSurvey to prevent stale segment
@@ -404,6 +423,26 @@ export const SurveyMenuBar = ({
           lastSavedSurveyRef.current = structuredClone(savedData);
           isSuccessfullySavedRef.current = true;
           setLastAutoSaved(new Date());
+        } else {
+          const previousBlocks = surveyRef.current.blocks;
+          if (!isDeepEqual(previousBlocks, currentSurvey.blocks)) {
+            const previousBlockIds = previousBlocks.map((block) => block.id);
+            const currentBlockIds = currentSurvey.blocks.map((block) => block.id);
+            const isReorder =
+              previousBlockIds.length === currentBlockIds.length &&
+              previousBlockIds.some((id, index) => id !== currentBlockIds[index]) &&
+              previousBlocks.every((block) =>
+                isDeepEqual(block, currentSurvey.blocks.find((currentBlock) => currentBlock.id === block.id))
+              );
+            try {
+              pushDataLayer("survey_structure_update_failed", {
+                edit_operation: isReorder ? "reorder" : "edit",
+                failure_category: updatedSurveyResponse?.validationErrors ? "validation" : "server_error",
+              });
+            } catch {
+              // Analytics must not interfere with the survey save result.
+            }
+          }
         }
       } catch (e) {
         // A stale bundle's action id is rejected by the new deployment: hand it to the reload
@@ -436,12 +475,49 @@ export const SurveyMenuBar = ({
 
       setIsSurveySaving(false);
       if (updatedSurveyResponse?.data) {
+        const previousBlocks = (lastSavedSurveyRef.current ?? surveyRef.current).blocks;
+        if (!isDeepEqual(previousBlocks, localSurvey.blocks)) {
+          const previousBlockIds = previousBlocks.map((block) => block.id);
+          const currentBlockIds = localSurvey.blocks.map((block) => block.id);
+          const isReorder =
+            previousBlockIds.length === currentBlockIds.length &&
+            previousBlockIds.some((id, index) => id !== currentBlockIds[index]) &&
+            previousBlocks.every((block) =>
+              isDeepEqual(block, localSurvey.blocks.find((currentBlock) => currentBlock.id === block.id))
+            );
+          try {
+            pushDataLayer("survey_structure_updated", {
+              edit_operation: isReorder ? "reorder" : "edit",
+            });
+          } catch {
+            // Analytics must not interfere with the successful survey save.
+          }
+        }
         setLocalSurvey(updatedSurveyResponse.data);
         lastSavedSurveyRef.current = structuredClone(updatedSurveyResponse.data);
         toast.success(t("workspace.surveys.edit.changes_saved"));
         isSuccessfullySavedRef.current = true;
         router.refresh();
       } else {
+        const previousBlocks = (lastSavedSurveyRef.current ?? surveyRef.current).blocks;
+        if (!isDeepEqual(previousBlocks, localSurvey.blocks)) {
+          const previousBlockIds = previousBlocks.map((block) => block.id);
+          const currentBlockIds = localSurvey.blocks.map((block) => block.id);
+          const isReorder =
+            previousBlockIds.length === currentBlockIds.length &&
+            previousBlockIds.some((id, index) => id !== currentBlockIds[index]) &&
+            previousBlocks.every((block) =>
+              isDeepEqual(block, localSurvey.blocks.find((currentBlock) => currentBlock.id === block.id))
+            );
+          try {
+            pushDataLayer("survey_structure_update_failed", {
+              edit_operation: isReorder ? "reorder" : "edit",
+              failure_category: updatedSurveyResponse?.validationErrors ? "validation" : "server_error",
+            });
+          } catch {
+            // Analytics must not interfere with the survey save result.
+          }
+        }
         const errorMessage = getFormattedErrorMessage(updatedSurveyResponse);
         toast.error(errorMessage);
         return false;

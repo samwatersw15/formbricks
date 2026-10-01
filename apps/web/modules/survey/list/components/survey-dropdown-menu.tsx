@@ -24,6 +24,7 @@ import type { TSurveyStatus } from "@formbricks/types/surveys/types";
 import { useWorkspace } from "@/app/(app)/workspaces/[workspaceId]/context/workspace-context";
 import { cn } from "@/lib/cn";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { getV3ApiErrorMessage } from "@/modules/api/lib/v3-client";
 import { EditPublicSurveyAlertDialog } from "@/modules/survey/components/edit-public-survey-alert-dialog";
 import { copySurveyToOtherWorkspaceAction } from "@/modules/survey/list/actions";
@@ -137,6 +138,11 @@ export const SurveyDropDownMenu = ({
 
     try {
       await deleteSurvey(surveyId);
+      try {
+        pushDataLayer("survey_deleted", { survey_type: survey.type });
+      } catch {
+        // Analytics must not affect the successful survey deletion.
+      }
       toast.success(t("workspace.surveys.survey_deleted_successfully"));
     } catch (error) {
       toast.error(getV3ApiErrorMessage(error, t("workspace.surveys.error_deleting_survey")));
@@ -150,6 +156,11 @@ export const SurveyDropDownMenu = ({
     const toastId = toast.loading(t("workspace.surveys.archiving_survey"));
     try {
       await archiveSurvey(survey.id);
+      try {
+        pushDataLayer("survey_archived", { survey_type: survey.type });
+      } catch {
+        // Analytics must not affect the successful survey archive.
+      }
       toast.success(t("workspace.surveys.survey_archived_successfully"), { id: toastId });
       setArchiveDialogOpen(false);
     } catch (error) {
@@ -166,6 +177,11 @@ export const SurveyDropDownMenu = ({
     const toastId = toast.loading(t("workspace.surveys.restoring_survey"));
     try {
       await restoreSurvey(survey.id);
+      try {
+        pushDataLayer("survey_restored", { survey_type: survey.type });
+      } catch {
+        // Analytics must not affect the successful survey restore.
+      }
       toast.success(t("workspace.surveys.survey_restored_successfully"), { id: toastId });
     } catch (error) {
       toast.error(getV3ApiErrorMessage(error, t("workspace.surveys.error_restoring_survey")), {
