@@ -35,6 +35,7 @@ import {
 } from "@/modules/ui/components/sheet";
 import { Switch } from "@/modules/ui/components/switch";
 import { Textarea } from "@/modules/ui/components/textarea";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { deleteFeedbackRecordAction, retrieveFeedbackRecordAction } from "../actions";
 import { FIELD_TYPE_OPTIONS, type TFeedbackRecordFormValues } from "../lib/types";
 import {
@@ -131,8 +132,18 @@ export const FeedbackRecordFormDrawer = ({
     try {
       const result = await deleteFeedbackRecordAction({ workspaceId, recordId });
       if (!result?.data) {
+        try {
+          pushDataLayer("feedback_record_maintenance_failed", { action: "delete" });
+        } catch {
+          // Analytics must not interfere with the failed deletion response.
+        }
         toast.error(getFormattedErrorMessage(result));
         return;
+      }
+      try {
+        pushDataLayer("feedback_record_deleted", { delete_outcome: "deleted" });
+      } catch {
+        // Analytics must not interfere with the successful deletion.
       }
       toast.success(t("workspace.unify.feedback_record_deleted_successfully"));
       setIsDeleteDialogOpen(false);
