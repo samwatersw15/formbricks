@@ -2,6 +2,7 @@ import type { TSurveyStatus } from "@formbricks/types/surveys/types";
 import type { TV3SurveyGenerateBody } from "@/app/api/v3/surveys/generate/schemas";
 import type { TV3CreateSurveyBody, TV3SurveyValidationRequestBody } from "@/app/api/v3/surveys/schemas";
 import { parseV3ApiError } from "@/modules/api/lib/v3-client";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { normalizeSurveyFilters } from "@/modules/survey/list/lib/utils";
 import { TSurveyListItem, TSurveyOverviewFilters } from "@/modules/survey/list/types/survey-overview";
 
@@ -312,6 +313,11 @@ export async function validateSurveyCreatePayload(
   }
 
   const responseBody = (await response.json()) as { data: TV3CreateSurveyValidationResponse };
+  pushDataLayer("survey_validation_completed", {
+    operation: "create",
+    is_valid: responseBody.data.valid,
+    invalid_param_count: responseBody.data.invalid_params.length,
+  });
   return responseBody.data;
 }
 
@@ -332,6 +338,17 @@ export async function createV3Survey(
   });
 
   if (!response.ok) {
+    const failureCategory =
+      response.status === 400 || response.status === 422
+        ? "validation"
+        : response.status === 401 || response.status === 403
+          ? "permission"
+          : "server_error";
+    pushDataLayer("survey_creation_failed", {
+      survey_type: payload.type,
+      failure_category: failureCategory,
+      http_status: response.status,
+    });
     throw await parseV3ApiError(response);
   }
 

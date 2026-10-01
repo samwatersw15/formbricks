@@ -3,11 +3,12 @@
 import type { TFunction } from "i18next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { TOrganizationRole } from "@formbricks/types/memberships";
 import { getAccessFlags } from "@/lib/membership/utils";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
 import {
   getFeedbackDirectoryDetailsAction,
@@ -141,6 +142,13 @@ export const FeedbackDirectoryTable = ({
   const [showArchived, setShowArchived] = useState(false);
   const [loadingDirectoryId, setLoadingDirectoryId] = useState<string | null>(null);
   const router = useRouter();
+  const hasTrackedDatasetsViewed = useRef(false);
+
+  useEffect(() => {
+    if (hasTrackedDatasetsViewed.current) return;
+    hasTrackedDatasetsViewed.current = true;
+    pushDataLayer("feedback_datasets_viewed", { dataset_count: directories.length });
+  }, [directories.length]);
 
   const { isOwner, isManager } = getAccessFlags(membershipRole);
   const isOwnerOrManager = isOwner || isManager;

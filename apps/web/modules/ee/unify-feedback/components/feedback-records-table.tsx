@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TFunction } from "i18next";
 import { ChevronDownIcon, MessageSquareTextIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import type { TFeedbackSourceFieldMapping } from "@formbricks/types/feedback-source";
@@ -25,6 +25,7 @@ import {
 } from "@/modules/ui/components/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/modules/ui/components/tooltip";
 import { deleteFeedbackRecordAction } from "../actions";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { FieldTypeIcon } from "../lib/field-type-icons";
 import { formatFieldType, formatSourceType, resolveFeedbackDisplayText } from "../lib/utils";
 import { CsvImportModal } from "../sources/components/csv-import-modal";
@@ -53,6 +54,7 @@ const formatValue = (
 interface FeedbackRecordsTableProps {
   workspaceId: string;
   initialRecords: FeedbackRecordData[];
+  initialListSucceeded: boolean;
   initialCursors: Record<string, string>;
   initialContactIdByUserId: Record<string, string>;
   frdMap: Record<string, string>;
@@ -77,6 +79,7 @@ interface FeedbackRecordRowProps {
 export const FeedbackRecordsTable = ({
   workspaceId,
   initialRecords,
+  initialListSucceeded,
   initialCursors,
   initialContactIdByUserId,
   frdMap,
@@ -106,6 +109,33 @@ export const FeedbackRecordsTable = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [displayedListResponse, setDisplayedListResponse] = useState<{
+    has_more: boolean;
+    result_count: number;
+    sequence: number;
+  } | null>(() =>
+    initialListSucceeded
+      ? {
+          has_more: Object.keys(initialCursors).length > 0,
+          result_count: initialRecords.length,
+          sequence: 1,
+        }
+      : null
+  );
+  const nextListResponseSequence = useRef(initialListSucceeded ? 1 : 0);
+  const reportedListResponseSequence = useRef(0);
+
+  useEffect(() => {
+    if (!displayedListResponse || reportedListResponseSequence.current >= displayedListResponse.sequence) {
+      return;
+    }
+
+    reportedListResponseSequence.current = displayedListResponse.sequence;
+    pushDataLayer("feedback_records_viewed", {
+      result_count: displayedListResponse.result_count,
+      has_more: displayedListResponse.has_more,
+    });
+  }, [displayedListResponse]);
 
   const hasMore = Object.keys(cursors).length > 0;
   const selectedCount = selectedIds.size;
@@ -235,6 +265,11 @@ export const FeedbackRecordsTable = ({
     const mergedRecords = result.records.toSorted((a, b) => (a.collected_at < b.collected_at ? 1 : -1));
     setRecords(mergedRecords);
     setCursors(result.newCursors);
+    setDisplayedListResponse({
+      has_more: Object.keys(result.newCursors).length > 0,
+      result_count: result.records.length,
+      sequence: ++nextListResponseSequence.current,
+    });
     setSelectedIds(new Set());
     setIsRefreshing(false);
     toast.success(t("workspace.unify.feedback_records_refreshed"), { id: toastId });
@@ -266,6 +301,11 @@ export const FeedbackRecordsTable = ({
       [...prev, ...result.records].toSorted((a, b) => (a.collected_at < b.collected_at ? 1 : -1))
     );
     setCursors(result.newCursors);
+    setDisplayedListResponse({
+      has_more: Object.keys(result.newCursors).length > 0,
+      result_count: result.records.length,
+      sequence: ++nextListResponseSequence.current,
+    });
     setIsLoadingMore(false);
     void resolveContactsForRecords(result.records);
   };
@@ -296,17 +336,31 @@ export const FeedbackRecordsTable = ({
       for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
         const chunk = ids.slice(i, i + CHUNK_SIZE);
         const results = await Promise.all(
-          chunk.map(async (recordId) => ({
-            recordId,
-            result: await deleteFeedbackRecordAction({ workspaceId, recordId }),
-          }))
+          chunk.map(async (recordId) => {
+            try {
+              return { recordId, result: await deleteFeedbackRecordAction({ workspaceId, recordId }) };
+            } catch (error) {
+              pushDataLayer("feedback_record_maintenance_failed", {
+                action: "delete",
+                failure_category: "service_unavailable",
+              });
+              throw error;
+            }
+          })
         );
         results.forEach(({ recordId, result }) => {
-          if (!result?.data) failedIds.push(recordId);
+          if (!result?.data) {
+            failedIds.push(recordId);
+            pushDataLayer("feedback_record_maintenance_failed", {
+              action: "delete",
+              failure_category: result?.validationErrors ? "validation" : "server_error",
+            });
+          }
         });
       }
 
       const succeeded = ids.filter((id) => !failedIds.includes(id));
+      succeeded.forEach(() => pushDataLayer("feedback_record_deleted", { delete_outcome: "deleted" }));
       if (succeeded.length > 0) {
         setRecords((prev) => prev.filter((record) => !succeeded.includes(record.id)));
         setSelectedIds((prev) => {

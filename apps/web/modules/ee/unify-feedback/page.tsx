@@ -137,6 +137,7 @@ export default async function UnifyFeedbackRecordsPage(
     <FeedbackRecordsPageClient
       workspaceId={params.workspaceId}
       initialRecords={merged}
+      initialListSucceeded={successfulResults.length > 0}
       initialCursors={initialCursors}
       initialContactIdByUserId={initialContactIdByUserId}
       frdMap={frdMap}

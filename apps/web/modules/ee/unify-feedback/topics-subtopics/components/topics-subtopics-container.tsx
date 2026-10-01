@@ -27,6 +27,7 @@ import { EmbeddingProgressBanner } from "./embedding-progress-banner";
 import { TaxonomyControls } from "./taxonomy-controls";
 import { TaxonomyDisplay } from "./taxonomy-display/taxonomy-display";
 import { TopicsSubtopicsGate } from "./topics-subtopics-gate";
+import { pushDataLayer } from "../../../../../../../src/lib/data-layer";
 
 interface TopicsSubtopicsContainerProps {
   workspaceId: string;
@@ -132,6 +133,12 @@ export const TopicsSubtopicsContainer = ({
     }
     return map;
   }, [recordCountsQuery.data]);
+
+  const selectedRecordCount = selectedNode ? recordCounts.get(selectedNode.id) : undefined;
+  useEffect(() => {
+    if (selectedRecordCount === undefined) return;
+    pushDataLayer("feedback_record_count_viewed", { record_count: selectedRecordCount });
+  }, [activeRunId, recordCountsQuery.data, selectedNode?.id, selectedRecordCount]);
 
   const triggerMutation = useTriggerTaxonomyRun({ workspaceId, scope });
   const renameMutation = useRenameTaxonomyNode({ workspaceId, scope });

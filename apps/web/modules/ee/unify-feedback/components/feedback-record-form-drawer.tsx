@@ -35,6 +35,7 @@ import {
 } from "@/modules/ui/components/sheet";
 import { Switch } from "@/modules/ui/components/switch";
 import { Textarea } from "@/modules/ui/components/textarea";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { deleteFeedbackRecordAction, retrieveFeedbackRecordAction } from "../actions";
 import { FIELD_TYPE_OPTIONS, type TFeedbackRecordFormValues } from "../lib/types";
 import {
@@ -129,11 +130,25 @@ export const FeedbackRecordFormDrawer = ({
     if (!recordId || !canDelete) return;
     setIsDeleting(true);
     try {
-      const result = await deleteFeedbackRecordAction({ workspaceId, recordId });
+      let result: Awaited<ReturnType<typeof deleteFeedbackRecordAction>>;
+      try {
+        result = await deleteFeedbackRecordAction({ workspaceId, recordId });
+      } catch (error) {
+        pushDataLayer("feedback_record_maintenance_failed", {
+          action: "delete",
+          failure_category: "service_unavailable",
+        });
+        throw error;
+      }
       if (!result?.data) {
+        pushDataLayer("feedback_record_maintenance_failed", {
+          action: "delete",
+          failure_category: result?.validationErrors ? "validation" : "server_error",
+        });
         toast.error(getFormattedErrorMessage(result));
         return;
       }
+      pushDataLayer("feedback_record_deleted", { delete_outcome: "deleted" });
       toast.success(t("workspace.unify.feedback_record_deleted_successfully"));
       setIsDeleteDialogOpen(false);
       await onSuccess();

@@ -1,5 +1,6 @@
 import "server-only";
 import { logger } from "@formbricks/logger";
+import type { THubFieldType } from "@formbricks/types/feedback-source";
 import { InvalidInputError } from "@formbricks/types/errors";
 import {
   TFeedbackSourceFormbricksMapping,
@@ -14,6 +15,7 @@ import { getErrorMessage } from "./utils";
 const IMPORT_BATCH_SIZE = 50;
 
 export type TImportResult = { successes: number; failures: number; skipped: number };
+export type TCsvImportResult = TImportResult & { createdFieldTypes: THubFieldType[] };
 
 const processBatch = async (
   responses: Awaited<ReturnType<typeof getResponses>>,

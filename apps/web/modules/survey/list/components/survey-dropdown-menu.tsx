@@ -46,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/modules/ui/components/dropdown-menu";
 import { SurveyStatusIndicator } from "@/modules/ui/components/survey-status-indicator";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 
 interface SurveyDropDownMenuProps {
   survey: TSurveyListItem;
@@ -137,6 +138,7 @@ export const SurveyDropDownMenu = ({
 
     try {
       await deleteSurvey(surveyId);
+      pushDataLayer("survey_deleted", { survey_type: survey.type });
       toast.success(t("workspace.surveys.survey_deleted_successfully"));
     } catch (error) {
       toast.error(getV3ApiErrorMessage(error, t("workspace.surveys.error_deleting_survey")));
@@ -150,6 +152,7 @@ export const SurveyDropDownMenu = ({
     const toastId = toast.loading(t("workspace.surveys.archiving_survey"));
     try {
       await archiveSurvey(survey.id);
+      pushDataLayer("survey_archived", { survey_type: survey.type });
       toast.success(t("workspace.surveys.survey_archived_successfully"), { id: toastId });
       setArchiveDialogOpen(false);
     } catch (error) {
@@ -166,6 +169,7 @@ export const SurveyDropDownMenu = ({
     const toastId = toast.loading(t("workspace.surveys.restoring_survey"));
     try {
       await restoreSurvey(survey.id);
+      pushDataLayer("survey_restored", { survey_type: survey.type });
       toast.success(t("workspace.surveys.survey_restored_successfully"), { id: toastId });
     } catch (error) {
       toast.error(getV3ApiErrorMessage(error, t("workspace.surveys.error_restoring_survey")), {
