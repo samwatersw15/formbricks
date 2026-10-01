@@ -1,10 +1,10 @@
 import "server-only";
 import { InvalidInputError } from "@formbricks/types/errors";
-import { TFeedbackSourceWithMappings } from "@formbricks/types/feedback-source";
+import type { TFeedbackSourceWithMappings } from "@formbricks/types/feedback-source";
 import { CSV_IMPORT_MISSING_COLUMNS_ERROR_CODE } from "@/modules/ee/unify-feedback/sources/types";
 import { createFeedbackRecordsBatch } from "@/modules/hub";
 import { transformCsvRowsToFeedbackRecords } from "./csv-transform";
-import { TImportResult } from "./import";
+import type { TCsvImportResult } from "./import";
 import {
   formatMissingRequiredCsvFieldMappingsMessage,
   getMissingCsvMappedSourceColumns,
@@ -16,7 +16,7 @@ const CSV_BATCH_SIZE = 50;
 export const importCsvData = async (
   feedbackSource: TFeedbackSourceWithMappings,
   csvRows: Record<string, string>[]
-): Promise<TImportResult> => {
+): Promise<TCsvImportResult> => {
   if (feedbackSource.type !== "csv") {
     throw new InvalidInputError("CSV import is only supported for CSV feedbackSources");
   }
@@ -47,13 +47,15 @@ export const importCsvData = async (
   let successes = 0;
   let failures = 0;
   let skipped = transformSkipped;
+  const createdFieldTypes: THubFieldType[] = [];
 
   for (let i = 0; i < records.length; i += CSV_BATCH_SIZE) {
     const batch = records.slice(i, i + CSV_BATCH_SIZE);
     const { results } = await createFeedbackRecordsBatch(batch);
-    for (const result of results) {
+    results.forEach((result, index) => {
       if (result.data !== null) {
         successes++;
+        createdFieldTypes.push(batch[index].field_type);
       } else if (result.error?.status === 409) {
         // Duplicate (tenant_id, submission_id, field_id) — already imported. Treat as skipped, not failed.
         skipped++;
@@ -63,5 +65,5 @@ export const importCsvData = async (
     }
   }
 
-  return { successes, failures, skipped };
+  return { successes, failures, skipped, createdFieldTypes };
 };

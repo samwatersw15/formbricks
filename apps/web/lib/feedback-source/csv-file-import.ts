@@ -11,7 +11,7 @@ import {
   CSV_PARSE_ERROR_CODE,
   MAX_CSV_VALUES,
 } from "@/modules/ee/unify-feedback/sources/types";
-import type { TImportResult } from "./import";
+import type { TCsvImportResult } from "./import";
 
 export type TCsvImportErrorCode =
   | typeof CSV_AT_LEAST_ONE_ROW_ERROR_CODE
@@ -101,7 +101,7 @@ export const importCsvFile = async ({
   feedbackSourceId: string;
   workspaceId: string;
   file: File;
-}): Promise<TImportResult> => {
+}): Promise<TCsvImportResult> => {
   const csvRows = await parseCsvImportFile(file);
   const [{ importCsvData }, { getFeedbackSourceWithMappingsById, updateFeedbackSource }] = await Promise.all([
     import("./csv-import"),

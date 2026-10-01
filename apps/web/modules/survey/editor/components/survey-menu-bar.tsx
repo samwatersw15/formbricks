@@ -30,6 +30,7 @@ import { Alert, AlertButton, AlertTitle } from "@/modules/ui/components/alert";
 import { AlertDialog } from "@/modules/ui/components/alert-dialog";
 import { Button } from "@/modules/ui/components/button";
 import { Input } from "@/modules/ui/components/input";
+import { pushDataLayer } from "../../../../../../src/lib/data-layer";
 import { updateSurveyAction, updateSurveyDraftAction } from "../actions";
 import { isMissingRequiredTrigger, isSurveyValid } from "../lib/validation";
 import { AutoSaveIndicator } from "./auto-save-indicator";
@@ -51,6 +52,52 @@ interface SurveyMenuBarProps {
   setIsCautionDialogOpen: (open: boolean) => void;
   isStorageConfigured: boolean;
 }
+
+const trackSurveyStructureUpdate = (previousSurvey: TSurvey, savedSurvey: TSurvey): void => {
+  const previousBlocks = previousSurvey.blocks ?? [];
+  const savedBlocks = savedSurvey.blocks ?? [];
+
+  if (isDeepEqual(previousBlocks, savedBlocks)) return;
+
+  const isReorder =
+    previousBlocks.length === savedBlocks.length &&
+    previousBlocks.every((previousBlock) => {
+      const savedBlock = savedBlocks.find((block) => block.id === previousBlock.id);
+      return savedBlock !== undefined && isDeepEqual(previousBlock, savedBlock);
+    });
+
+  pushDataLayer("survey_structure_updated", {
+    edit_operation: isReorder ? "reorder" : "edit",
+  });
+};
+
+const trackSurveyStructureUpdateFailure = (
+  previousSurvey: TSurvey,
+  attemptedSurvey: TSurvey,
+  failureCategory: "validation" | "server_error"
+): void => {
+  const previousBlocks = previousSurvey.blocks ?? [];
+  const attemptedBlocks = attemptedSurvey.blocks ?? [];
+  if (isDeepEqual(previousBlocks, attemptedBlocks)) return;
+
+  const previousIds = previousBlocks.map((block) => block.id);
+  const attemptedIds = attemptedBlocks.map((block) => block.id);
+  const isReorder =
+    previousIds.length === attemptedIds.length &&
+    previousIds.every((id) => attemptedIds.includes(id));
+  const editOperation = isReorder
+    ? "reorder"
+    : attemptedIds.length < previousIds.length
+      ? "remove"
+      : attemptedIds.length > previousIds.length
+        ? "add"
+        : "edit";
+
+  pushDataLayer("survey_structure_update_failed", {
+    edit_operation: editOperation,
+    failure_category: failureCategory,
+  });
+};
 
 export const SurveyMenuBar = ({
   localSurvey,
@@ -389,6 +436,7 @@ export const SurveyMenuBar = ({
 
         if (updatedSurveyResponse?.data) {
           const savedData = updatedSurveyResponse.data;
+          trackSurveyStructureUpdate(lastSavedSurveyRef.current ?? surveyRef.current, savedData);
 
           // If the segment changed on the server (e.g., private segment was deleted when
           // switching from app to link type), update localSurvey to prevent stale segment
@@ -404,6 +452,12 @@ export const SurveyMenuBar = ({
           lastSavedSurveyRef.current = structuredClone(savedData);
           isSuccessfullySavedRef.current = true;
           setLastAutoSaved(new Date());
+        } else {
+          trackSurveyStructureUpdateFailure(
+            lastSavedSurveyRef.current ?? surveyRef.current,
+            currentSurvey,
+            updatedSurveyResponse?.validationErrors ? "validation" : "server_error"
+          );
         }
       } catch (e) {
         // A stale bundle's action id is rejected by the new deployment: hand it to the reload
@@ -414,6 +468,11 @@ export const SurveyMenuBar = ({
           clearInterval(intervalId);
           return;
         }
+        trackSurveyStructureUpdateFailure(
+          lastSavedSurveyRef.current ?? surveyRef.current,
+          localSurveyRef.current,
+          "server_error"
+        );
         console.error(e);
       } finally {
         isAutoSavingRef.current = false;
@@ -436,12 +495,18 @@ export const SurveyMenuBar = ({
 
       setIsSurveySaving(false);
       if (updatedSurveyResponse?.data) {
+        trackSurveyStructureUpdate(lastSavedSurveyRef.current ?? survey, updatedSurveyResponse.data);
         setLocalSurvey(updatedSurveyResponse.data);
         lastSavedSurveyRef.current = structuredClone(updatedSurveyResponse.data);
         toast.success(t("workspace.surveys.edit.changes_saved"));
         isSuccessfullySavedRef.current = true;
         router.refresh();
       } else {
+        trackSurveyStructureUpdateFailure(
+          lastSavedSurveyRef.current ?? survey,
+          localSurvey,
+          updatedSurveyResponse?.validationErrors ? "validation" : "server_error"
+        );
         const errorMessage = getFormattedErrorMessage(updatedSurveyResponse);
         toast.error(errorMessage);
         return false;
@@ -454,6 +519,7 @@ export const SurveyMenuBar = ({
       if (reportStaleServerActionError(e)) {
         return false;
       }
+      trackSurveyStructureUpdateFailure(lastSavedSurveyRef.current ?? survey, localSurvey, "server_error");
       console.error(e);
       toast.error(t("workspace.surveys.edit.error_saving_changes"));
       return false;
@@ -511,6 +577,7 @@ export const SurveyMenuBar = ({
         // isSecondPublish is a transient action flag, not part of the survey — strip it so it
         // doesn't linger in editor state and get echoed back on the next update.
         const { isSecondPublish: _isSecondPublish, ...updatedSurvey } = updatedSurveyResponse.data;
+        trackSurveyStructureUpdate(lastSavedSurveyRef.current ?? survey, updatedSurvey);
         setLocalSurvey(updatedSurvey);
         lastSavedSurveyRef.current = structuredClone(updatedSurvey);
         toast.success(t("workspace.surveys.edit.changes_saved"));
@@ -518,6 +585,11 @@ export const SurveyMenuBar = ({
         isSuccessfullySavedRef.current = true;
         router.refresh();
       } else {
+        trackSurveyStructureUpdateFailure(
+          lastSavedSurveyRef.current ?? survey,
+          localSurvey,
+          updatedSurveyResponse?.validationErrors ? "validation" : "server_error"
+        );
         const errorMessage = getFormattedErrorMessage(updatedSurveyResponse);
         toast.error(errorMessage);
         return false;
@@ -529,6 +601,7 @@ export const SurveyMenuBar = ({
       if (reportStaleServerActionError(e)) {
         return false;
       }
+      trackSurveyStructureUpdateFailure(lastSavedSurveyRef.current ?? survey, localSurvey, "server_error");
       console.error(e);
       toast.error(t("workspace.surveys.edit.error_saving_changes"));
       return false;
@@ -590,6 +663,11 @@ export const SurveyMenuBar = ({
       });
 
       if (!publishResult?.data) {
+        trackSurveyStructureUpdateFailure(
+          lastSavedSurveyRef.current ?? survey,
+          localSurvey,
+          publishResult?.validationErrors ? "validation" : "server_error"
+        );
         const errorMessage = getFormattedErrorMessage(publishResult);
         toast.error(errorMessage);
         isSurveyPublishingRef.current = false;
@@ -616,6 +694,7 @@ export const SurveyMenuBar = ({
       if (reportStaleServerActionError(error)) {
         return;
       }
+      trackSurveyStructureUpdateFailure(lastSavedSurveyRef.current ?? survey, localSurvey, "server_error");
       console.error(error);
       toast.error(t("workspace.surveys.edit.error_publishing_survey"));
     }
@@ -654,6 +733,11 @@ export const SurveyMenuBar = ({
       });
 
       if (!scheduleResult?.data) {
+        trackSurveyStructureUpdateFailure(
+          lastSavedSurveyRef.current ?? survey,
+          localSurvey,
+          scheduleResult?.validationErrors ? "validation" : "server_error"
+        );
         const errorMessage = getFormattedErrorMessage(scheduleResult);
         toast.error(errorMessage);
         isSurveyPublishingRef.current = false;
@@ -663,6 +747,7 @@ export const SurveyMenuBar = ({
 
       isSurveyPublishingRef.current = false;
       setIsSurveyPublishing(false);
+      trackSurveyStructureUpdate(lastSavedSurveyRef.current ?? survey, scheduleResult.data);
       isSuccessfullySavedRef.current = true;
       router.push(`${workspaceBasePath}/surveys/${localSurvey.id}/summary?scheduled=true`);
     } catch (error) {
@@ -671,6 +756,7 @@ export const SurveyMenuBar = ({
       if (reportStaleServerActionError(error)) {
         return;
       }
+      trackSurveyStructureUpdateFailure(lastSavedSurveyRef.current ?? survey, localSurvey, "server_error");
       console.error(error);
       toast.error(t("workspace.surveys.edit.error_publishing_survey"));
     }

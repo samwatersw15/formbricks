@@ -1,6 +1,7 @@
 import { TOrganizationRole } from "@formbricks/types/memberships";
 import { SettingsCard } from "@/app/(app)/workspaces/[workspaceId]/settings/components/SettingsCard";
 import { getTranslate } from "@/lingodotdev/server";
+import { FeedbackDirectoryListFailure } from "@/modules/ee/feedback-directory/components/feedback-directory-list-failure";
 import { FeedbackDirectoryTable } from "@/modules/ee/feedback-directory/components/feedback-directory-table";
 import {
   getFeedbackDirectories,
@@ -19,11 +20,24 @@ export const FeedbackDirectoryView = async ({
 }: FeedbackDirectoryViewProps) => {
   const t = await getTranslate();
 
-  const [directories, orgWorkspaces, workspaceAccessByWorkspace] = await Promise.all([
-    getFeedbackDirectories(organizationId),
+  const [directoryResult, orgWorkspaces, workspaceAccessByWorkspace] = await Promise.all([
+    getFeedbackDirectories(organizationId)
+      .then((directories) => ({ directories }))
+      .catch(() => ({ directories: null })),
     getWorkspacesByOrganizationId(organizationId),
     getWorkspaceFeedbackDirectoryAccess(organizationId),
   ]);
+
+  if (directoryResult.directories === null) {
+    return (
+      <SettingsCard
+        title={t("workspace.settings.feedback_directories.title")}
+        description={t("workspace.settings.feedback_directories.description")}
+        bodyVariant="flush">
+        <FeedbackDirectoryListFailure />
+      </SettingsCard>
+    );
+  }
 
   return (
     <SettingsCard

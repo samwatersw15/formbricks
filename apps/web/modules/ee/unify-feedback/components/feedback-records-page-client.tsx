@@ -13,6 +13,7 @@ import { UnifyConfigNavigation } from "./unify-config-navigation";
 interface FeedbackRecordsPageClientProps {
   workspaceId: string;
   initialRecords: FeedbackRecordData[];
+  initialListSucceeded: boolean;
   initialCursors: Record<string, string>;
   initialContactIdByUserId: Record<string, string>;
   frdMap: Record<string, string>;
@@ -24,6 +25,7 @@ interface FeedbackRecordsPageClientProps {
 export function FeedbackRecordsPageClient({
   workspaceId,
   initialRecords,
+  initialListSucceeded,
   initialCursors,
   initialContactIdByUserId,
   frdMap,
@@ -48,6 +50,7 @@ export function FeedbackRecordsPageClient({
         <FeedbackRecordsTable
           workspaceId={workspaceId}
           initialRecords={initialRecords}
+          initialListSucceeded={initialListSucceeded}
           initialCursors={initialCursors}
           initialContactIdByUserId={initialContactIdByUserId}
           frdMap={frdMap}
